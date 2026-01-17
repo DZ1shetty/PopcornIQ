@@ -6,7 +6,7 @@
     "server"
   ],
   "scripts": {
-    "build": "cd client && npm install && npm run build",
+    "build": "cd client && npm run build",
     "dev": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\""
   },
   "engines": {
