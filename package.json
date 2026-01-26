@@ -10,7 +10,7 @@
     "dev": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\""
   },
   "engines": {
-    "node": ">=14"
+    "node": "20.x"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"
