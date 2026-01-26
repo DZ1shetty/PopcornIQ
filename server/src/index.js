@@ -38,6 +38,22 @@ app.get('/', (req, res) => {
   res.send('PopcornIQ API is running');
 });
 
+// Debug Catch-all for checking path issues
+app.all('*', (req, res, next) => {
+  // If it reached here, it didn't match any API routes above
+  // Only handle if it starts with /api to avoid interfering with static if managed here (though vercel handles static separately)
+  if (req.path.startsWith('/api')) {
+    res.status(404).json({
+      error: 'API Route Not Found',
+      path: req.path,
+      method: req.method,
+      env_mongo: process.env.MONGO_URI ? 'Set' : 'Missing'
+    });
+  } else {
+    next();
+  }
+});
+
 // Error Handler
 const { errorHandler } = require('./middleware/errorMiddleware');
 app.use(errorHandler);
