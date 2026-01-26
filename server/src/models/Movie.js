@@ -21,6 +21,6 @@ const MovieSchema = new mongoose.Schema({
 });
 
 MovieSchema.index({ title: 'text', genres: 'text' });
-MovieSchema.index({ movieId: 1 });
+
 
 module.exports = mongoose.model('Movie', MovieSchema);

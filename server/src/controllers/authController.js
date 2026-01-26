@@ -105,8 +105,62 @@ const getMe = async (req, res) => {
     res.status(200).json(req.user);
 };
 
+// @desc    Google Login
+// @route   POST /api/auth/google
+// @access  Public
+const googleLogin = async (req, res) => {
+    try {
+        const { email, username, googleId } = req.body; // In prod, verify token instead
+
+        if (!email) {
+            res.status(400);
+            throw new Error('Email is required');
+        }
+
+        let user = await User.findOne({ email });
+
+        if (user) {
+            // User exists, return token
+            res.json({
+                _id: user.id,
+                username: user.username,
+                email: user.email,
+                token: generateToken(user.id),
+            });
+        } else {
+            // Register new user
+            const randomPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8);
+            const salt = await bcrypt.genSalt(10);
+            const hashedPassword = await bcrypt.hash(randomPassword, salt);
+
+            user = await User.create({
+                username: username || email.split('@')[0],
+                email,
+                password: hashedPassword,
+                googleId // Optional: store googleId if you added field to schema, else ignore
+            });
+
+            if (user) {
+                res.status(201).json({
+                    _id: user.id,
+                    username: user.username,
+                    email: user.email,
+                    token: generateToken(user.id),
+                });
+            } else {
+                res.status(400);
+                throw new Error('Invalid user data');
+            }
+        }
+    } catch (error) {
+        res.status(400);
+        throw new Error(error.message);
+    }
+};
+
 module.exports = {
     registerUser,
     loginUser,
     getMe,
+    googleLogin
 };

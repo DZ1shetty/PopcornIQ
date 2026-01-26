@@ -5,6 +5,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const { connectDB } = require('./db');
 
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -20,6 +21,8 @@ connectDB();
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/movies', require('./routes/movieRoutes'));
 app.use('/api/recommendations', require('./routes/recommendationRoutes'));
+app.use('/api/tmdb', require('./routes/tmdbRoutes'));
+app.use('/api/watchlist', require('./routes/watchlistRoutes'));
 
 // Basic Route
 app.get('/', (req, res) => {
@@ -31,10 +34,13 @@ const { errorHandler } = require('./middleware/errorMiddleware');
 app.use(errorHandler);
 
 // Start Server
-// Start Server
 if (require.main === module) {
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+  const server = app.listen(PORT, '127.0.0.1', () => {
+    console.log(`Server running on http://127.0.0.1:${PORT}`);
+  });
+
+  process.on('unhandledRejection', (err) => {
+    console.error('Unhandled Rejection:', err);
   });
 }
 
