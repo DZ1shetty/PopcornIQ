@@ -6,9 +6,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 // Lazy Loaded Pages for faster initial bundle scan 🏎️
 const Home = lazy(() => import('./pages/Home'));
 const MovieDetails = lazy(() => import('./pages/MovieDetails'));
-const LandingPage = lazy(() => import('./pages/LandingPage'));
+const PremiumLandingPage = lazy(() => import('./pages/PremiumLandingPage'));
 const PersonDetails = lazy(() => import('./pages/PersonDetails'));
 const SectionPage = lazy(() => import('./pages/SectionPage'));
+const SwipeMatcher = lazy(() => import('./pages/SwipeMatcher'));
+
 
 // Components
 import Navbar from './components/Navbar';
@@ -17,7 +19,7 @@ import CinematicBackground from './components/CinematicBackground';
 import SearchPalette from './components/SearchPalette';
 import GenreDiscovery from './components/GenreDiscovery';
 import CountryDiscovery from './components/CountryDiscovery';
-import MoodDiscovery from './components/MoodDiscovery';
+
 import ArchiveDiscovery from './components/ArchiveDiscovery';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -89,14 +91,13 @@ function App() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isGenreOpen, setIsGenreOpen] = useState(false);
   const [isCountryOpen, setIsCountryOpen] = useState(false);
-  const [isMoodOpen, setIsMoodOpen] = useState(false);
+
   const [isArchiveOpen, setIsArchiveOpen] = useState(false);
 
   const closeAllOverlays = () => {
     setIsSearchOpen(false);
     setIsGenreOpen(false);
     setIsCountryOpen(false);
-    setIsMoodOpen(false);
     setIsArchiveOpen(false);
   };
 
@@ -104,7 +105,6 @@ function App() {
     setIsSearchOpen(true);
     setIsGenreOpen(false);
     setIsCountryOpen(false);
-    setIsMoodOpen(false);
     setIsArchiveOpen(false);
   };
 
@@ -112,7 +112,6 @@ function App() {
     setIsGenreOpen(true);
     setIsSearchOpen(false);
     setIsCountryOpen(false);
-    setIsMoodOpen(false);
     setIsArchiveOpen(false);
   };
 
@@ -120,15 +119,6 @@ function App() {
     setIsCountryOpen(true);
     setIsSearchOpen(false);
     setIsGenreOpen(false);
-    setIsMoodOpen(false);
-    setIsArchiveOpen(false);
-  };
-
-  const handleMoodClick = () => {
-    setIsMoodOpen(true);
-    setIsSearchOpen(false);
-    setIsGenreOpen(false);
-    setIsCountryOpen(false);
     setIsArchiveOpen(false);
   };
 
@@ -137,19 +127,18 @@ function App() {
     setIsSearchOpen(false);
     setIsGenreOpen(false);
     setIsCountryOpen(false);
-    setIsMoodOpen(false);
   };
 
   // 🔒 Global Body Scroll Lock while overlays are active
   useEffect(() => {
-    if (isSearchOpen || isGenreOpen || isCountryOpen || isMoodOpen || isArchiveOpen) {
+    if (isSearchOpen || isGenreOpen || isCountryOpen || isArchiveOpen) {
       document.body.style.overflow = 'hidden';
       document.body.style.paddingRight = 'var(--removed-body-padding, 0px)';
     } else {
       document.body.style.overflow = '';
       document.body.style.paddingRight = '';
     }
-  }, [isSearchOpen, isGenreOpen, isCountryOpen, isMoodOpen, isArchiveOpen]);
+  }, [isSearchOpen, isGenreOpen, isCountryOpen, isArchiveOpen]);
 
   // 🚀 Close overlays on route change, but check for triggers first
   useEffect(() => {
@@ -158,10 +147,16 @@ function App() {
 
     if (trigger === 'genres') {
       setIsGenreOpen(true);
-      // Clean URL without refresh
       window.history.replaceState({}, '', '/home');
     } else if (trigger === 'countries') {
       setIsCountryOpen(true);
+      window.history.replaceState({}, '', '/home');
+
+    } else if (trigger === 'search') {
+      setIsSearchOpen(true);
+      window.history.replaceState({}, '', '/home');
+    } else if (trigger === 'archive') {
+      setIsArchiveOpen(true);
       window.history.replaceState({}, '', '/home');
     } else {
       closeAllOverlays();
@@ -190,10 +185,7 @@ function App() {
         e.preventDefault();
         handleCountryClick();
       }
-      if (e.key === 'm' && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
-        e.preventDefault();
-        handleMoodClick();
-      }
+
       if (e.key === 'w' && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
         e.preventDefault();
         handleArchiveClick();
@@ -218,25 +210,9 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-background text-primary font-sans relative overflow-hidden selection:bg-accent selection:text-white">
+      <div className="min-h-screen bg-background text-on-surface font-sans relative overflow-x-hidden">
 
-        {/* 🔦 Global Cinema Spotlight */}
-        <div
-          className="pointer-events-none fixed inset-0 z-[9999] transition-opacity duration-500"
-          style={{
-            background: `radial-gradient(600px circle at var(--mouse-x) var(--mouse-y), rgba(255, 255, 255, 0.04), transparent 40%)`
-          }}
-        />
-
-        {/* 🎞️ Global Film Grain */}
-        <div
-          className="fixed inset-0 pointer-events-none opacity-[0.035] mix-blend-overlay z-[9998]"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`
-          }}
-        />
-
-        <CinematicBackground />
+          <CinematicBackground />
 
         {/* Overlays */}
         <SearchPalette
@@ -251,10 +227,7 @@ function App() {
           isOpen={isCountryOpen}
           onClose={() => setIsCountryOpen(false)}
         />
-        <MoodDiscovery
-          isOpen={isMoodOpen}
-          onClose={() => setIsMoodOpen(false)}
-        />
+
         <ArchiveDiscovery
           isOpen={isArchiveOpen}
           onClose={() => setIsArchiveOpen(false)}
@@ -266,12 +239,10 @@ function App() {
             onSearchClick={handleSearchClick}
             onGenreClick={handleGenreClick}
             onCountryClick={handleCountryClick}
-            onMoodClick={handleMoodClick}
             onArchiveClick={handleArchiveClick}
             isSearchOpen={isSearchOpen}
             isGenreOpen={isGenreOpen}
             isCountryOpen={isCountryOpen}
-            isMoodOpen={isMoodOpen}
             isArchiveOpen={isArchiveOpen}
           />
         )}
@@ -279,24 +250,24 @@ function App() {
         {/* Cinematic Route Loading 🎢 */}
         <Suspense fallback={
           <div className="min-h-screen flex items-center justify-center bg-background">
-            <div className="w-12 h-px bg-accent animate-pulse" />
+            <div className="w-12 h-px bg-primary animate-pulse" />
           </div>
         }>
           <AnimatePresence mode="wait" initial={false}>
             <Routes location={location} key={location.pathname}>
               <Route path="/" element={
                 <PageWrapper>
-                  <LandingPage />
+                  <PremiumLandingPage />
                 </PageWrapper>
               } />
               <Route path="/login" element={
                 <PageWrapper>
-                  {user ? <Navigate to="/home" /> : <LandingPage />}
+                  {user ? <Navigate to="/home" /> : <PremiumLandingPage />}
                 </PageWrapper>
               } />
               <Route path="/register" element={
                 <PageWrapper>
-                  {user ? <Navigate to="/home" /> : <LandingPage />}
+                  {user ? <Navigate to="/home" /> : <PremiumLandingPage />}
                 </PageWrapper>
               } />
 
@@ -307,6 +278,9 @@ function App() {
                   </PageWrapper>
                 </ProtectedRoute>
               } />
+
+
+
               <Route path="/movie/:id" element={
                 <ProtectedRoute>
                   <PageWrapper variant="scale">
@@ -325,6 +299,13 @@ function App() {
                 <ProtectedRoute>
                   <PageWrapper variant="fade">
                     <SectionPage />
+                  </PageWrapper>
+                </ProtectedRoute>
+              } />
+              <Route path="/match" element={
+                <ProtectedRoute>
+                  <PageWrapper variant="slide">
+                    <SwipeMatcher />
                   </PageWrapper>
                 </ProtectedRoute>
               } />

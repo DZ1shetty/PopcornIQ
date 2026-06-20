@@ -5,7 +5,7 @@ const mongoose = require('mongoose');
 // @desc    Get Top Rated Movies
 // @route   GET /api/recommendations/top-rated
 // @access  Public
-const getTopRated = async (req, res) => {
+const getTopRated = async (req, res, next) => {
     try {
         const topRated = await Rating.aggregate([
             {
@@ -15,8 +15,8 @@ const getTopRated = async (req, res) => {
                     voteCount: { $sum: 1 }
                 }
             },
-            { $match: { voteCount: { $gte: 100 } } }, // Threshold can be adjusted
-            { $sort: { avgRating: -1 } },
+            { $match: { voteCount: { $gte: 50 } } }, // Lowered threshold for better diversity
+            { $sort: { avgRating: -1, voteCount: -1 } },
             { $limit: 20 },
             {
                 $lookup: {
@@ -33,78 +33,34 @@ const getTopRated = async (req, res) => {
                     avgRating: 1,
                     voteCount: 1,
                     movieId: "$_id",
+                    tmdbId: "$details.tmdbId",
                     title: "$details.title",
-                    genres: "$details.genres",
-                    posterPath: "$details.posterPath"
+                    genres: "$details.genresArray",
+                    posterPath: "$details.posterPath",
+                    backdropPath: "$details.backdropPath"
                 }
             }
         ]);
 
         res.json(topRated);
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        next(error);
     }
 };
 
 // @desc    Get Personalized Recommendations (User's fav genres -> high rated unwatched)
 // @route   GET /api/recommendations/personalized
 // @access  Private
-const getPersonalizedRecs = async (req, res) => {
-    // Assuming req.user.id is available via auth middleware
-    // But Rating collection uses numeric userId from MovieLens. 
-    // We need to map our Auth User to MovieLens userId or just use Auth User's ratings if we were collecting them.
-    // For this 'demo' with MovieLens data, we might need to simulate a userId or use the one from the logged in user if we link them.
-    // Let's assume for now we use the ID passed in query or body for testing, or map it.
-    // PRD says: "User register/logins". 
-    // If new user, cold start -> fallback to top rated.
-    // If we want to test "Personalized", we might need to "masquerade" as a MovieLens user (e.g. userId 1).
+const getPersonalizedRecs = async (req, res, next) => {
+    // For MovieLens demo data, allow mockUserId
+    const userId = req.query.mockUserId ? parseInt(req.query.mockUserId) : (req.user ? parseInt(req.user.id) : null);
 
-    // For real implementation:
-    // 1. Get current user's ratings.
-    // 2. If < 5 ratings, return Top Rated (Cold Start).
-    // 3. Else run aggregation.
-
-    // Since we don't have real ratings for new users yet, I will allow passing ?mockUserId=1 to simulate.
-    const userId = req.query.mockUserId ? parseInt(req.query.mockUserId) : null;
-
-    if (!userId) {
-        // Cold start or real user with no ratings
-        // For now, return Top Rated
-        return getTopRated(req, res);
+    if (!userId || isNaN(userId)) {
+        return getTopRated(req, res, next);
     }
 
     try {
-        const recs = await Rating.aggregate([
-            { $match: { userId: userId, rating: { $gte: 4 } } },
-            {
-                $lookup: {
-                    from: "movies",
-                    localField: "movieId",
-                    foreignField: "movieId",
-                    as: "movie"
-                }
-            },
-            { $unwind: "$movie" },
-            { $unwind: "$movie.genresArray" },
-            { $group: { _id: "$movie.genresArray", count: { $sum: 1 } } },
-            { $sort: { count: -1 } },
-            { $limit: 3 },
-            { $group: { _id: null, topGenres: { $push: "$_id" } } },
-            {
-                $lookup: {
-                    from: "movies",
-                    pipeline: [
-                        { $match: { $expr: { $in: ["$genresArray", "$$topGenres"] } } }, // Note: We need to access topGenres from parent. 
-                        // Error: variable $$topGenres is not defined in this scope directly in 4.x/5.x without 'let'.
-                        // Fix below with 'let'.
-                    ],
-                    as: "recs" // This logic is tricky in one pipeline without 'let'.
-                }
-            }
-        ]);
-
-        // Correct Pipeline for Personalized Recs
-        // 1. Get Top Genres
+        // 1. Get user's top genres from their high ratings (4+)
         const userPreferences = await Rating.aggregate([
             { $match: { userId: userId, rating: { $gte: 4 } } },
             { $lookup: { from: "movies", localField: "movieId", foreignField: "movieId", as: "movie" } },
@@ -112,68 +68,25 @@ const getPersonalizedRecs = async (req, res) => {
             { $unwind: "$movie.genresArray" },
             { $group: { _id: "$movie.genresArray", count: { $sum: 1 } } },
             { $sort: { count: -1 } },
-            { $limit: 3 }
+            { $limit: 5 }
         ]);
 
         const topGenres = userPreferences.map(g => g._id);
 
+        // 2. Get IDs of movies the user has already rated
+        const ratedMovies = await Rating.find({ userId }).select('movieId');
+        const ratedMovieIds = ratedMovies.map(r => r.movieId);
+
         if (topGenres.length === 0) {
-            return getTopRated(req, res);
+            return getTopRated(req, res, next);
         }
 
-        // 2. Find movies in those genres that user hasn't watched
+        // 3. Find top rated movies in those genres that user hasn't rated
         const recommendations = await Movie.aggregate([
-            { $match: { genresArray: { $in: topGenres } } },
-            {
-                $lookup: {
-                    from: "ratings",
-                    localField: "movieId",
-                    foreignField: "movieId",
-                    as: "allRatings"
-                }
-            },
-            {
-                // Filter out movies watched by user
-                // This approaches memory limits if not careful, but for 9k movies it's okay.
-                // Better: Match where ratings.userId != userId
-                // But we have array of ratings.
-                $match: {
-                    "allRatings.userId": { $ne: userId }
-                }
-            },
-            {
-                $project: {
-                    title: 1,
-                    genres: 1,
-                    posterPath: 1,
-                    avgRating: { $avg: "$allRatings.rating" },
-                    movieId: 1
-                }
-            },
-            { $sort: { avgRating: -1 } },
-            { $limit: 20 }
-        ]);
-
-        res.json(recommendations);
-
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
-};
-
-// @desc    Get Top Rated Movies by Genre
-// @route   GET /api/recommendations/genre/:genre
-// @access  Public
-const getTopRatedByGenre = async (req, res) => {
-    const genre = req.params.genre;
-    try {
-        const movies = await Movie.aggregate([
-            { $match: { genresArray: genre } },
-            // Optimization: Filter movies that have at least some ratings? 
-            // Or use the Rating collection to drive this if Movie collection doesn't have cached ratings.
-            // Since we don't have cached average ratings in Movie yet (only in the schema, not populated), we must join.
-            // This is heavy. Limit initial set? No, we need top rated.
-            // Let's use the provided aggregation from PRD but optimized.
+            { $match: { 
+                genresArray: { $in: topGenres },
+                movieId: { $nin: ratedMovieIds }
+            }},
             {
                 $lookup: {
                     from: "ratings",
@@ -182,34 +95,175 @@ const getTopRatedByGenre = async (req, res) => {
                     as: "ratingData"
                 }
             },
-            // Unwind is dangerous for 100k ratings if we match ALL movies first.
-            // Better: Group ratings first?
-            // "db.movies.aggregate" was the PRD suggestion.
-            // Let's stick to it but limit the $lookup if possible.
-            // Actually, querying Ratings sorted by average rating, then filtering by Genre is better?
-            // But Genres are in Movies.
-            // So: Match Movies by Genre -> Lookup Ratings -> Unwind -> Group -> Sort.
-            { $unwind: "$ratingData" },
             {
-                $group: {
-                    _id: "$movieId",
+                $addFields: {
                     avgRating: { $avg: "$ratingData.rating" },
-                    title: { $first: "$title" },
-                    posterPath: { $first: "$posterPath" },
-                    genres: { $first: "$genresArray" }
+                    voteCount: { $size: "$ratingData" }
                 }
             },
-            { $sort: { avgRating: -1 } },
-            { $limit: 10 }
+            { $match: { voteCount: { $gte: 1 } } },
+            { $sort: { avgRating: -1, voteCount: -1 } },
+            { $limit: 24 },
+            {
+                $project: {
+                    _id: 0,
+                    movieId: 1,
+                    tmdbId: 1,
+                    title: 1,
+                    posterPath: 1,
+                    backdropPath: 1,
+                    genresArray: 1,
+                    avgRating: 1,
+                    voteCount: 1
+                }
+            }
+        ]);
+
+        res.json(recommendations);
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+// @desc    Get Top Rated Movies by Genre
+// @route   GET /api/recommendations/genre/:genre
+// @access  Public
+const getTopRatedByGenre = async (req, res, next) => {
+    const genre = req.params.genre;
+    try {
+        const movies = await Movie.aggregate([
+            { $match: { genresArray: genre } },
+            {
+                $lookup: {
+                    from: "ratings",
+                    localField: "movieId",
+                    foreignField: "movieId",
+                    as: "ratingData"
+                }
+            },
+            {
+                $addFields: {
+                    avgRating: { $avg: "$ratingData.rating" },
+                    voteCount: { $size: "$ratingData" }
+                }
+            },
+            { $match: { voteCount: { $gte: 1 } } },
+            { $sort: { avgRating: -1, voteCount: -1 } },
+            { $limit: 20 },
+            {
+                $project: {
+                    _id: 0,
+                    movieId: 1,
+                    tmdbId: 1,
+                    title: 1,
+                    posterPath: 1,
+                    genresArray: 1,
+                    avgRating: 1
+                }
+            }
         ]);
         res.json(movies);
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        next(error);
+    }
+};
+
+// @desc    Get "People Also Liked" (Collaborative Filtering)
+// @route   GET /api/recommendations/similar/:movieId
+// @access  Public
+const getPeopleAlsoLiked = async (req, res, next) => {
+    let { movieId } = req.params;
+    movieId = parseInt(movieId);
+
+    if (isNaN(movieId)) {
+        return res.status(400).json({ message: "Invalid movie ID" });
+    }
+
+    try {
+        // 1. Find users who liked this movie (rating >= 4)
+        const topUsers = await Rating.find({ movieId, rating: { $gte: 4 } })
+            .limit(100)
+            .select('userId');
+        
+        const userIds = topUsers.map(u => u.userId);
+
+        if (userIds.length === 0) {
+            // Fallback: Just return generic similar movies based on genres if no ratings exist
+            const movie = await Movie.findOne({ movieId });
+            if (!movie) return res.json([]);
+            
+            const similar = await Movie.find({
+                genresArray: { $in: movie.genresArray },
+                movieId: { $ne: movieId }
+            })
+            .sort({ voteAverage: -1 })
+            .limit(10);
+            return res.json(similar);
+        }
+
+        // 2. Find other movies these users liked
+        const recommendations = await Rating.aggregate([
+            { $match: { userId: { $in: userIds }, movieId: { $ne: movieId }, rating: { $gte: 4 } } },
+            { $group: { _id: "$movieId", score: { $sum: 1 } } },
+            { $sort: { score: -1 } },
+            { $limit: 12 },
+            {
+                $lookup: {
+                    from: "movies",
+                    localField: "_id",
+                    foreignField: "movieId",
+                    as: "details"
+                }
+            },
+            { $unwind: "$details" },
+            {
+                $project: {
+                    _id: 0,
+                    movieId: "$_id",
+                    tmdbId: "$details.tmdbId",
+                    title: "$details.title",
+                    posterPath: "$details.posterPath",
+                    backdropPath: "$details.backdropPath",
+                    avgRating: "$details.voteAverage"
+                }
+            }
+        ]);
+
+        res.json(recommendations);
+    } catch (error) {
+        next(error);
+    }
+};
+
+// @desc    Unified Search (Local + TMDB)
+// @route   GET /api/recommendations/search
+// @access  Public
+const unifiedSearch = async (req, res, next) => {
+    const { q } = req.query;
+    if (!q) return res.json([]);
+
+    try {
+        // 1. Local Text Search
+        const localResults = await Movie.find(
+            { $text: { $search: q } },
+            { score: { $meta: "textScore" } }
+        )
+        .sort({ score: { $meta: "textScore" } })
+        .limit(5);
+
+        // 2. We could also hit TMDB here, but usually the frontend does that separately.
+        // If the user wants a TRULY unified search on the backend:
+        res.json(localResults);
+    } catch (error) {
+        next(error);
     }
 };
 
 module.exports = {
     getTopRated,
     getPersonalizedRecs,
-    getTopRatedByGenre
+    getTopRatedByGenre,
+    getPeopleAlsoLiked,
+    unifiedSearch
 };

@@ -4,73 +4,11 @@ const axios = require('axios');
 const router = express.Router();
 const TMDB_BASE = "https://api.themoviedb.org/3";
 
-// Simple In-Memory Cache
+// Simple In-Memory Cache with shorter TTL for fresher data
 const cache = new Map();
-const CACHE_TTL = 60 * 60 * 1000; // 60 minutes for peak velocity
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes - fresher data for better user experience
 
-const tmdb = axios.create({
-    baseURL: TMDB_BASE,
-    timeout: 15000, // Increased timeout for slower networks
-    headers: {
-        accept: "application/json",
-    },
-});
-
-// Priority IPv4 resolution + KeepAlive - fixes most 'ECONNRESET' & 'ETIMEDOUT' issues
-const https = require('https');
-tmdb.defaults.httpsAgent = new https.Agent({
-    family: 4,
-    keepAlive: true,
-    maxSockets: 100,
-    maxFreeSockets: 10,
-    timeout: 30000
-});
-
-// Robust Retry Logic for Network Instability
-tmdb.interceptors.response.use(
-    response => response,
-    async (error) => {
-        const config = error.config;
-
-        // Only retry if it's a network error or a 5xx server error
-        const isNetworkError = !error.response || error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT';
-        const isRetryableStatus = error.response?.status >= 500;
-
-        if (config && (isNetworkError || isRetryableStatus) && !config._isRetry) {
-            config._isRetry = true;
-            config._retryCount = config._retryCount || 0;
-
-            if (config._retryCount < 3) {
-                config._retryCount++;
-                console.warn(`[TMDB Retry] Attempt ${config._retryCount} for ${config.url} due to ${error.code || error.response?.status}`);
-
-                // Exponential backoff
-                const delay = Math.pow(2, config._retryCount) * 1000;
-                await new Promise(resolve => setTimeout(resolve, delay));
-
-                return tmdb(config);
-            }
-        }
-        return Promise.reject(error);
-    }
-);
-
-// Improved Interceptor: Priority to Bearer Token, fallback to API Key
-tmdb.interceptors.request.use((config) => {
-    const token = process.env.TMDB_ACCESS_TOKEN;
-    const apiKey = process.env.TMDB_API_KEY;
-
-    // Remove any existing auth to avoid confusion
-    delete config.headers.Authorization;
-
-    if (token && token.length > 30) {
-        config.headers.Authorization = `Bearer ${token}`;
-    } else if (apiKey) {
-        config.params = { ...config.params, api_key: apiKey };
-    }
-
-    return config;
-}, (error) => Promise.reject(error));
+const tmdb = require('../services/tmdbService');
 
 const getFromCache = (key) => {
     const entry = cache.get(key);
@@ -142,10 +80,17 @@ const proxyRequest = async (path, params = {}, res, cacheKey) => {
     }
 };
 
-router.get("/trending/today", (req, res) => proxyRequest("/trending/movie/day", { page: req.query.page || 1 }, res));
-router.get("/popular", (req, res) => proxyRequest("/movie/popular", { page: req.query.page || 1 }, res));
-router.get("/top-rated", (req, res) => proxyRequest("/movie/top_rated", { page: req.query.page || 1 }, res));
+// Main Section Routes with Unique Cache Keys
+router.get("/trending/today", (req, res) => proxyRequest("/trending/movie/day", { page: req.query.page || 1 }, res, `trending-day-p${req.query.page || 1}`));
+router.get("/popular", (req, res) => proxyRequest("/movie/popular", { page: req.query.page || 1 }, res, `popular-p${req.query.page || 1}`));
+router.get("/top-rated", (req, res) => proxyRequest("/movie/top_rated", { page: req.query.page || 1 }, res, `top-rated-p${req.query.page || 1}`));
 router.get("/genres", (req, res) => proxyRequest("/genre/movie/list", {}, res, "tmdb-genres-list"));
+
+// Clear Cache Endpoint (for testing/debugging)
+router.post("/clear-cache", (req, res) => {
+    cache.clear();
+    res.json({ success: true, message: "Cache cleared successfully" });
+});
 
 router.get("/search", (req, res) => {
     const q = req.query.q || "";
@@ -168,16 +113,32 @@ router.get("/discover/genre/:id/new", (req, res) => {
     proxyRequest("/discover/movie", { with_genres: id, sort_by: "release_date.desc", "vote_count.gte": 10, page: req.query.page || 1 }, res, `genre-${id}-new-p${req.query.page || 1}`);
 });
 
-// ✅ Discover by Country (Sorted Alphabetically)
+// ✅ Discover Anime
+router.get("/discover/anime", (req, res) => {
+    const subGenre = req.query.sub_genre;
+    const genres = subGenre ? `16,${subGenre}` : "16";
+    
+    proxyRequest("/discover/tv", { 
+        with_genres: genres, 
+        with_original_language: "ja", 
+        sort_by: "popularity.desc",
+        include_adult: false,
+        "vote_count.gte": 50, // Ensures reputable/popular shows
+        page: req.query.page || 1 
+    }, res, `anime-tv-${subGenre || 'all'}-pop-p${req.query.page || 1}`);
+});
+
+// ✅ Discover by Country (Latest Movies)
 router.get("/discover/country/:code", (req, res) => {
     const { code } = req.params;
-    // Note: sorting by title is available but usually requires a vote count threshold to be useful
+    const today = new Date().toISOString().split('T')[0];
     proxyRequest("/discover/movie", {
         with_origin_country: code,
-        sort_by: "original_title.asc",
+        sort_by: "primary_release_date.desc",
+        "primary_release_date.lte": today,
         "vote_count.gte": 1,
         page: req.query.page || 1
-    }, res, `country-${code}-alpha-p${req.query.page || 1}`);
+    }, res, `country-${code}-latest-p${req.query.page || 1}`);
 });
 
 // ✅ Get All Countries

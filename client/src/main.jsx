@@ -7,16 +7,20 @@ import { AuthProvider } from './context/AuthContext';
 import { WatchlistProvider } from './context/WatchlistContext';
 import { ToastProvider } from './components/Toast';
 
+import { ThemeProvider } from './context/ThemeContext';
+
 ReactDOM.createRoot(document.getElementById('root')).render(
     <React.StrictMode>
         <BrowserRouter>
-            <AuthProvider>
-                <WatchlistProvider>
-                    <ToastProvider>
-                        <App />
-                    </ToastProvider>
-                </WatchlistProvider>
-            </AuthProvider>
+            <ThemeProvider>
+                <AuthProvider>
+                    <WatchlistProvider>
+                        <ToastProvider>
+                            <App />
+                        </ToastProvider>
+                    </WatchlistProvider>
+                </AuthProvider>
+            </ThemeProvider>
         </BrowserRouter>
     </React.StrictMode>,
 );

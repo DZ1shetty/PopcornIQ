@@ -16,7 +16,8 @@ const UserSchema = new mongoose.Schema({
     preferences: {
         favoriteGenres: [String],
         watchlist: [Number], // movieIds for quick lookups
-        watchlistData: [WatchlistItemSchema] // Rich movie data
+        watchlistData: [WatchlistItemSchema], // Rich movie data
+        dislikedMovies: { type: [Number], default: [] }
     },
     googleId: { type: String },
     createdAt: { type: Date, default: Date.now }

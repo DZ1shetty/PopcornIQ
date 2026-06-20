@@ -1,39 +1,123 @@
+import scrollbarHide from 'tailwind-scrollbar-hide';
 /** @type {import('tailwindcss').Config} */
 export default {
     content: [
         "./index.html",
         "./src/**/*.{js,ts,jsx,tsx}",
     ],
+    darkMode: 'class',
     theme: {
         extend: {
             colors: {
-                background: '#080808', // Matte Carbon
-                surface: '#121212',    // Deep Slate
-                primary: '#ffffff',    // Pure White for high contrast
-                accent: '#4F46E5',     // Electric Indigo for focus points
-                muted: '#636363',      // Soft Grey for secondary text
+                // Stitch Modern Minimalist palette via CSS variables
+                background:                 'rgb(var(--color-background) / <alpha-value>)',
+                surface:                    'rgb(var(--color-surface) / <alpha-value>)',
+                'surface-dim':              'rgb(var(--color-surface-dim) / <alpha-value>)',
+                'surface-bright':           'rgb(var(--color-surface-bright) / <alpha-value>)',
+                'surface-container-lowest': 'rgb(var(--color-surface-container-lowest) / <alpha-value>)',
+                'surface-container-low':    'rgb(var(--color-surface-container-low) / <alpha-value>)',
+                'surface-container':        'rgb(var(--color-surface-container) / <alpha-value>)',
+                'surface-container-high':   'rgb(var(--color-surface-container-high) / <alpha-value>)',
+                'surface-container-highest':'rgb(var(--color-surface-container-highest) / <alpha-value>)',
+                'surface-variant':          'rgb(var(--color-surface-variant) / <alpha-value>)',
+                'surface-tint':             'rgb(var(--color-surface-tint) / <alpha-value>)',
+                primary:                    'rgb(var(--color-primary) / <alpha-value>)',
+                'on-primary':               'rgb(var(--color-on-primary) / <alpha-value>)',
+                'primary-container':        'rgb(var(--color-primary-container) / <alpha-value>)',
+                'on-primary-container':     'rgb(var(--color-on-primary-container) / <alpha-value>)',
+                'primary-fixed':            'rgb(var(--color-primary-fixed) / <alpha-value>)',
+                'primary-fixed-dim':        'rgb(var(--color-primary-fixed-dim) / <alpha-value>)',
+                'on-primary-fixed':         'rgb(var(--color-on-primary-fixed) / <alpha-value>)',
+                'on-primary-fixed-variant': 'rgb(var(--color-on-primary-fixed-variant) / <alpha-value>)',
+                'inverse-primary':          'rgb(var(--color-inverse-primary) / <alpha-value>)',
+                secondary:                  'rgb(var(--color-secondary) / <alpha-value>)',
+                'on-secondary':             'rgb(var(--color-on-secondary) / <alpha-value>)',
+                'secondary-container':      'rgb(var(--color-secondary-container) / <alpha-value>)',
+                'on-secondary-container':   'rgb(var(--color-on-secondary-container) / <alpha-value>)',
+                'secondary-fixed':          'rgb(var(--color-secondary-fixed) / <alpha-value>)',
+                'secondary-fixed-dim':      'rgb(var(--color-secondary-fixed-dim) / <alpha-value>)',
+                'on-secondary-fixed':       'rgb(var(--color-on-secondary-fixed) / <alpha-value>)',
+                'on-secondary-fixed-variant':'rgb(var(--color-on-secondary-fixed-variant) / <alpha-value>)',
+                tertiary:                   'rgb(var(--color-tertiary) / <alpha-value>)',
+                'on-tertiary':              'rgb(var(--color-on-tertiary) / <alpha-value>)',
+                'tertiary-container':       'rgb(var(--color-tertiary-container) / <alpha-value>)',
+                'on-tertiary-container':    'rgb(var(--color-on-tertiary-container) / <alpha-value>)',
+                'tertiary-fixed':           'rgb(var(--color-tertiary-fixed) / <alpha-value>)',
+                'tertiary-fixed-dim':       'rgb(var(--color-tertiary-fixed-dim) / <alpha-value>)',
+                'on-tertiary-fixed':        'rgb(var(--color-on-tertiary-fixed) / <alpha-value>)',
+                'on-tertiary-fixed-variant':'rgb(var(--color-on-tertiary-fixed-variant) / <alpha-value>)',
+                'on-background':            'rgb(var(--color-on-background) / <alpha-value>)',
+                'on-surface':               'rgb(var(--color-on-surface) / <alpha-value>)',
+                'on-surface-variant':       'rgb(var(--color-on-surface-variant) / <alpha-value>)',
+                outline:                    'rgb(var(--color-outline) / <alpha-value>)',
+                'outline-variant':          'rgb(var(--color-outline-variant) / <alpha-value>)',
+                'inverse-surface':          'rgb(var(--color-inverse-surface) / <alpha-value>)',
+                'inverse-on-surface':       'rgb(var(--color-inverse-on-surface) / <alpha-value>)',
+                error:                      'rgb(var(--color-error) / <alpha-value>)',
+                'on-error':                 'rgb(var(--color-on-error) / <alpha-value>)',
+                'error-container':          'rgb(var(--color-error-container) / <alpha-value>)',
+                'on-error-container':       'rgb(var(--color-on-error-container) / <alpha-value>)',
+                // Accent keeps a warm tone for interactive CTA
+                accent:                     'rgb(var(--color-accent) / <alpha-value>)',
             },
             fontFamily: {
-                sans: ['Outfit', 'sans-serif'],
+                sans:     ['Inter', 'sans-serif'],
+                headline: ['Playfair Display', 'Georgia', 'serif'],
+                display:  ['Playfair Display', 'Georgia', 'serif'],
+                label:    ['Inter', 'sans-serif'],
+                body:     ['Inter', 'sans-serif'],
+            },
+            fontSize: {
+                'display-lg':        ['64px', { lineHeight: '1.1', letterSpacing: '-0.02em', fontWeight: '700' }],
+                'display-lg-mobile': ['40px', { lineHeight: '1.2', letterSpacing: '-0.01em', fontWeight: '700' }],
+                'headline-lg':       ['32px', { lineHeight: '1.3', fontWeight: '600' }],
+                'headline-md':       ['24px', { lineHeight: '1.4', fontWeight: '600' }],
+                'body-lg':           ['18px', { lineHeight: '1.6', fontWeight: '400' }],
+                'body-md':           ['16px', { lineHeight: '1.6', fontWeight: '400' }],
+                'label-md':          ['14px', { lineHeight: '1.2', letterSpacing: '0.05em', fontWeight: '600' }],
+                'label-sm':          ['12px', { lineHeight: '1.2', fontWeight: '500' }],
+            },
+            borderRadius: {
+                DEFAULT: '0.125rem',
+                sm:      '0.125rem',
+                md:      '0.25rem',
+                lg:      '0.25rem',
+                xl:      '0.5rem',
+                full:    '9999px',
+            },
+            spacing: {
+                'gutter':           '24px',
+                'unit':             '8px',
+                'margin-mobile':    '20px',
+                'margin-desktop':   '64px',
+                'container-max':    '1280px',
+                'panel-gap':        '12px',
+            },
+            maxWidth: {
+                'container-max': '1280px',
             },
             animation: {
-                'reveal': 'reveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards',
-                'slide-up': 'slideUp 0.5s ease-out forwards',
-                'spotlight': 'spotlight 2s linear infinite',
+                'reveal':      'reveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                'slide-up':    'slideUp 0.5s ease-out forwards',
+                'fade-in':     'fadeIn 0.4s ease-out forwards',
             },
             keyframes: {
                 reveal: {
-                    '0%': { opacity: '0', filter: 'blur(20px)', transform: 'scale(1.05)' },
-                    '100%': { opacity: '1', filter: 'blur(0)', transform: 'scale(1)' },
+                    '0%':   { opacity: '0', transform: 'translateY(16px)' },
+                    '100%': { opacity: '1', transform: 'translateY(0)' },
                 },
                 slideUp: {
-                    '0%': { opacity: '0', transform: 'translateY(20px)' },
+                    '0%':   { opacity: '0', transform: 'translateY(20px)' },
                     '100%': { opacity: '1', transform: 'translateY(0)' },
+                },
+                fadeIn: {
+                    '0%':   { opacity: '0' },
+                    '100%': { opacity: '1' },
                 },
             },
         },
     },
     plugins: [
-        require('tailwind-scrollbar-hide')
+        scrollbarHide,
     ],
-}
+};

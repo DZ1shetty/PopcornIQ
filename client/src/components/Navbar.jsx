@@ -1,49 +1,48 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Search, Compass, Layers, Globe, LogOut, User, Brain, Bookmark, Shuffle } from 'lucide-react';
-import { useState, useEffect } from 'react';
-import { motion, AnimatePresence, useScroll, useMotionValueEvent } from 'framer-motion';
-
+import { useTheme } from '../context/ThemeContext';
+import { useState } from 'react';
+import { motion, useScroll, useMotionValueEvent } from 'framer-motion';
 import api from '../services/api';
 
-const Navbar = ({ onDiscoverClick, onSearchClick, onGenreClick, onCountryClick, onMoodClick, onArchiveClick, isSearchOpen, isGenreOpen, isCountryOpen, isMoodOpen, isArchiveOpen }) => {
+const Navbar = ({
+    onDiscoverClick,
+    onSearchClick,
+    onGenreClick,
+    onCountryClick,
+    onArchiveClick,
+    isSearchOpen,
+    isGenreOpen,
+    isCountryOpen,
+    isArchiveOpen,
+}) => {
     const { user, logout } = useAuth();
+    const { theme, toggleTheme } = useTheme();
     const navigate = useNavigate();
     const location = useLocation();
     const [scrolled, setScrolled] = useState(false);
     const [visible, setVisible] = useState(true);
     const [lastScrollY, setLastScrollY] = useState(0);
-    const [hoveredLink, setHoveredLink] = useState(null);
     const [scrollProgress, setScrollProgress] = useState(0);
+    const [mobileOpen, setMobileOpen] = useState(false);
 
     const { scrollY } = useScroll();
 
-    useMotionValueEvent(scrollY, "change", (latest) => {
-        const currentScrollY = latest;
-        const diff = currentScrollY - lastScrollY;
-        const isScrollingUp = diff < 0;
+    useMotionValueEvent(scrollY, 'change', (latest) => {
+        requestAnimationFrame(() => {
+            const diff = latest - lastScrollY;
+            const isScrollingUp = diff < 0;
+            const isOverlayOpen = isSearchOpen || isGenreOpen || isCountryOpen || isArchiveOpen;
 
-        setScrolled(currentScrollY > 50);
+            setScrolled(latest > 50);
+            if (latest < 10 || isScrollingUp || isOverlayOpen) setVisible(true);
+            else if (latest > 100 && !isScrollingUp) setVisible(false);
 
-        // 🧠 Intelligent Visibility Logic
-        // Stay visible if: At top OR Scrolling up OR Overlay is active
-        const isAtTop = currentScrollY < 10;
-        const isOverlayOpen = isSearchOpen || isGenreOpen || isCountryOpen || isMoodOpen || isArchiveOpen;
-
-        if (isAtTop || isScrollingUp || isOverlayOpen) {
-            setVisible(true);
-        } else if (currentScrollY > 100 && !isScrollingUp) {
-            setVisible(false);
-        }
-
-        setLastScrollY(currentScrollY);
-
-        // Calculate scroll progress for the cinematic indicator
-        const totalHeight = document.documentElement.scrollHeight - window.innerHeight;
-        const progress = (currentScrollY / totalHeight) * 100;
-        setScrollProgress(progress);
+            setLastScrollY(latest);
+            const totalHeight = document.documentElement.scrollHeight - window.innerHeight;
+            setScrollProgress(totalHeight > 0 ? (latest / totalHeight) * 100 : 0);
+        });
     });
-
 
     const handleLogout = () => {
         logout();
@@ -53,189 +52,192 @@ const Navbar = ({ onDiscoverClick, onSearchClick, onGenreClick, onCountryClick, 
     const handleDiscoverClick = () => {
         onDiscoverClick?.();
         navigate('/home');
+        setMobileOpen(false);
     };
 
     const navLinks = [
         {
             name: 'Discover',
             action: handleDiscoverClick,
-            icon: Compass,
-            key: '/',
-            isActive: location.pathname === '/home' && !isGenreOpen && !isCountryOpen && !isSearchOpen && !isMoodOpen && !isArchiveOpen
+            isActive: (location.pathname === '/home' || (location.pathname.startsWith('/movie/') && location.state?.from !== 'random')) && !isGenreOpen && !isCountryOpen && !isSearchOpen && !isArchiveOpen,
+        },
+        { name: 'Genres', action: () => { onGenreClick(); setMobileOpen(false); }, isActive: isGenreOpen },
+        { name: 'Countries', action: () => { onCountryClick(); setMobileOpen(false); }, isActive: isCountryOpen },
+        { name: 'Vault', action: () => { onArchiveClick(); setMobileOpen(false); }, isActive: isArchiveOpen },
+        {
+            name: 'PopcornMatch',
+            action: () => {
+                navigate('/match');
+                setMobileOpen(false);
+            },
+            isActive: location.pathname === '/match',
         },
         {
-            name: 'Genres',
-            action: onGenreClick,
-            icon: Layers,
-            key: 'G',
-            isActive: isGenreOpen
-        },
-        {
-            name: 'Countries',
-            action: onCountryClick,
-            icon: Globe,
-            key: 'C',
-            isActive: isCountryOpen
-        },
-        {
-            name: 'By Mood',
-            action: onMoodClick,
-            icon: Brain,
-            key: 'M',
-            isActive: isMoodOpen
-        },
-        {
-            name: 'Watchlist',
-            action: onArchiveClick,
-            icon: Bookmark,
-            key: 'W',
-            isActive: isArchiveOpen
-        },
-        {
-            name: 'Surprise Me',
+            name: 'Random',
             action: async () => {
+                setMobileOpen(false);
                 try {
-                    // 🎲 Fetch a random page of popular movies (1-50)
                     const randomPage = Math.floor(Math.random() * 50) + 1;
                     const { data } = await api.get(`/api/tmdb/popular?page=${randomPage}`);
-
                     if (data.results?.length) {
                         const randomMovie = data.results[Math.floor(Math.random() * data.results.length)];
-                        navigate(`/movie/${randomMovie.id}`);
+                        navigate(`/movie/${randomMovie.id}`, { state: { from: 'random' } });
                     }
                 } catch (err) {
-                    console.error("Surprise Failed:", err);
+                    console.error('Random failed:', err);
                 }
             },
-            icon: Shuffle,
-            key: 'R',
-            isActive: location.pathname.startsWith('/movie/') && !isSearchOpen && !isGenreOpen && !isCountryOpen && !isMoodOpen && !isArchiveOpen
-        }
+            isActive: location.pathname.startsWith('/movie/') && location.state?.from === 'random',
+        },
     ];
 
     return (
-        <header
-            className={`fixed top-0 left-0 right-0 z-[2000] transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${visible ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0'
-                } ${scrolled
-                    ? 'py-1.5 bg-background/60 backdrop-blur-3xl shadow-[0_10px_40px_-15px_rgba(0,0,0,0.5)]'
-                    : 'py-3 bg-transparent'
-                }`}
-            style={{
-                boxShadow: scrolled ? `0 10px 50px -15px rgba(0,0,0,0.7), 0 1px 0 0 rgba(255,255,255,${0.02 + (scrollProgress / 1000)})` : 'none'
-            }}
+        <motion.header
+            animate={{ y: visible ? 0 : -80, opacity: visible ? 1 : 0 }}
+            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            className={`fixed top-0 left-0 right-0 z-[2000] transition-all duration-300 ${
+                scrolled
+                    ? 'bg-background/90 nav-blur border-b border-outline-variant/40 shadow-sm'
+                    : 'bg-background/80 nav-blur border-b border-outline-variant/20'
+            }`}
         >
-            {/* Dynamic Signal Aura (Replaces the static white line) */}
-            <div
-                className="absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-transparent via-accent/20 to-transparent transition-all duration-1000"
-                style={{
-                    opacity: scrolled ? 1 : 0,
-                    transform: `scaleX(${0.5 + (scrollProgress / 200)})`,
-                    filter: `blur(${4 + (scrollProgress / 20)}px)`
-                }}
-            />
+            <div className="flex justify-between items-center h-16 px-margin-mobile md:px-margin-desktop max-w-container-max mx-auto">
 
-            <div className="container mx-auto px-8 flex justify-between items-center gap-6">
-
-                {/* Logo Section */}
+                {/* Wordmark */}
                 <Link
-                    to="/"
-                    className="group flex items-center gap-2 transition-transform hover:scale-105"
+                    to="/home"
+                    onClick={onDiscoverClick}
+                    className="font-headline text-xl md:text-2xl font-bold tracking-tight text-primary hover:opacity-70 transition-opacity"
                 >
-                    <div className="relative h-16 w-auto flex items-center justify-center">
-                        <motion.img
-                            src="/src/assets/popcorn-logo.png"
-                            alt="PopcornIQ Logo"
-                            className="h-full w-auto object-contain drop-shadow-[0_0_8px_rgba(255,255,255,0.3)] filter brightness-125"
-                            whileHover={{
-                                rotate: [0, -10, 10, -5, 5, 0],
-                                scale: 1.1,
-                                filter: "brightness(1.5) drop-shadow(0 0 15px rgba(168, 85, 247, 0.6))"
-                            }}
-                            transition={{
-                                duration: 0.6,
-                                ease: "easeInOut"
-                            }}
-                        />
-                    </div>
-                    <span className="text-xl font-black tracking-tighter uppercase bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent group-hover:to-white transition-all duration-500">
-                        Popcorn<span className="text-accent italic">IQ</span>
-                    </span>
+                    PopcornIQ
                 </Link>
 
-                {/* Main Navigation Bridge */}
-                <nav className="hidden lg:flex items-center gap-1 bg-white/5 p-1 rounded-full border border-white/5 backdrop-blur-md">
-                    {navLinks.map((link, idx) => {
-                        const isActive = link.isActive;
-                        const isHovered = hoveredLink === link.name;
-
-                        return (
-                            <motion.button
-                                key={link.name}
-                                initial={{ opacity: 0, y: -10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: 0.1 + (idx * 0.05) }}
-                                onClick={link.action || (() => navigate(link.path))}
-                                onMouseEnter={() => setHoveredLink(link.name)}
-                                onMouseLeave={() => setHoveredLink(null)}
-                                className={`relative px-4 py-2 flex items-center gap-2 text-tiny font-black uppercase tracking-wider transition-all duration-500 rounded-full
-                                    ${isActive || isHovered ? 'text-white' : 'text-muted/60'}
-                                `}
-                            >
-                                <link.icon size={14} className={isActive || isHovered ? 'text-accent' : ''} />
-                                {link.name}
-
-                                {/* Hover/Active Background Pill */}
-                                {(isHovered || isActive) && (
-                                    <motion.div
-                                        layoutId="navPill"
-                                        className={`absolute inset-0 rounded-full -z-10 ${isActive ? 'bg-white/10' : 'bg-white/5'}`}
-                                        initial={false}
-                                        animate={{ opacity: 1 }}
-                                        exit={{ opacity: 0 }}
-                                    />
-                                )}
-                            </motion.button>
-                        );
-                    })}
+                {/* Desktop Nav Links */}
+                <nav className="hidden lg:flex items-center gap-8">
+                    {navLinks.map((link) => (
+                        <button
+                            key={link.name}
+                            onClick={link.action}
+                            className={`font-sans text-body-md transition-all py-1 relative group ${
+                                link.isActive
+                                    ? 'text-primary font-semibold'
+                                    : 'text-on-surface-variant hover:text-primary'
+                            }`}
+                        >
+                            {link.name}
+                            {/* Animated underline */}
+                            <span className={`absolute -bottom-0.5 left-0 h-[2px] bg-primary transition-all duration-300 ${
+                                link.isActive ? 'w-full' : 'w-0 group-hover:w-full'
+                            }`} />
+                        </button>
+                    ))}
                 </nav>
 
-                {/* Meta & User Bridge */}
-                <div className="flex items-center gap-8">
-                    {/* Integrated Search Trigger */}
+                {/* Actions */}
+                <div className="flex items-center gap-4">
+                    {/* Theme Toggle */}
                     <button
-                        onClick={onSearchClick}
-                        className={`group flex items-center gap-3 text-tiny font-black uppercase tracking-widest transition-all ${isSearchOpen ? 'text-white' : 'text-muted/60 hover:text-white'}`}
-                        title="Search movies"
+                        onClick={toggleTheme}
+                        className="p-2 rounded-sm text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all flex items-center justify-center"
+                        title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
                     >
-                        <div className={`p-2 transition-all transform ${isSearchOpen ? 'rotate-90 text-accent' : 'group-hover:rotate-90 group-hover:text-accent'}`}>
-                            <Search size={22} strokeWidth={2.5} />
-                        </div>
-                        <span className={`hidden xl:inline transition-all duration-500 font-bold uppercase tracking-widest text-xs ${isSearchOpen ? 'opacity-100 translate-x-0' : 'opacity-0 group-hover:opacity-100 translate-x-4 group-hover:translate-x-0'}`}>
-                            Search
-                        </span>
+                        <motion.span
+                            key={theme}
+                            initial={{ rotate: -90, opacity: 0 }}
+                            animate={{ rotate: 0, opacity: 1 }}
+                            exit={{ rotate: 90, opacity: 0 }}
+                            transition={{ duration: 0.3 }}
+                            className="material-symbols-outlined text-[20px]"
+                            style={{ fontVariationSettings: "'FILL' 1" }}
+                        >
+                            {theme === 'light' ? 'dark_mode' : 'light_mode'}
+                        </motion.span>
                     </button>
 
-                    {/* Authenticated Zone */}
-                    <div className="flex items-center gap-3 pl-4 border-l border-white/10">
-                        <div className="hidden sm:flex flex-col items-end">
-                            <span className="text-[9px] text-muted font-bold uppercase tracking-[0.2em] mb-1">Signed in as</span>
-                            <span className="text-sm text-white font-extrabold tracking-tight">{user?.email?.split('@')[0]}</span>
+                    {/* Search */}
+                    <button
+                        onClick={onSearchClick}
+                        className={`p-2 rounded-sm transition-all hover:bg-surface-container ${
+                            isSearchOpen ? 'bg-surface-container text-primary' : 'text-on-surface-variant hover:text-primary'
+                        }`}
+                        title="Search (Ctrl+K)"
+                    >
+                        <span className="material-symbols-outlined text-[20px]">search</span>
+                    </button>
+
+                    {/* Divider */}
+                    <div className="hidden sm:block w-px h-5 bg-outline-variant/50" />
+
+                    {/* User identity + logout */}
+                    <div className="flex items-center gap-3">
+                        <div className="hidden md:flex flex-col items-end">
+                            <span className="font-sans text-label-sm text-on-surface-variant leading-none">{user?.email?.split('@')[0]}</span>
                         </div>
 
-                        <div className="relative group">
-                            <button
-                                onClick={handleLogout}
-                                className="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center bg-surface hover:bg-white hover:text-black transition-all duration-500 group"
-                                title="Logout"
-                            >
-                                <LogOut size={18} className="group-hover:translate-x-1 transition-transform" />
-                            </button>
-                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-14 h-14 border border-accent/20 rounded-full scale-0 group-hover:scale-100 transition-all duration-700 pointer-events-none" />
+                        {/* Avatar */}
+                        <div className="w-8 h-8 rounded-full overflow-hidden border border-outline-variant/40 bg-surface-container-high flex-shrink-0">
+                            <div className="w-full h-full flex items-center justify-center bg-primary text-on-primary text-label-sm font-semibold">
+                                {user?.email?.charAt(0)?.toUpperCase() || 'U'}
+                            </div>
                         </div>
+
+                        {/* Logout */}
+                        <button
+                            onClick={handleLogout}
+                            title="Sign out"
+                            className="hidden sm:flex p-2 rounded-sm text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all"
+                        >
+                            <span className="material-symbols-outlined text-[18px]">logout</span>
+                        </button>
                     </div>
+
+                    {/* Mobile hamburger */}
+                    <button
+                        onClick={() => setMobileOpen(!mobileOpen)}
+                        className="flex lg:hidden p-2 text-on-surface-variant hover:text-primary transition-colors"
+                    >
+                        <span className="material-symbols-outlined text-[20px]">{mobileOpen ? 'close' : 'menu'}</span>
+                    </button>
                 </div>
             </div>
-        </header>
+
+            {/* Scroll Progress Line */}
+            <div className="absolute inset-x-0 bottom-0 h-px bg-outline-variant/20 overflow-hidden">
+                <motion.div
+                    className="h-full bg-primary origin-left"
+                    style={{ scaleX: scrollProgress / 100 }}
+                />
+            </div>
+
+            {/* Mobile Menu */}
+            {mobileOpen && (
+                <motion.div
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.2 }}
+                    className="lg:hidden bg-background border-b border-outline-variant/30 px-margin-mobile py-4 space-y-1"
+                >
+                    {navLinks.map((link) => (
+                        <button
+                            key={link.name}
+                            onClick={link.action}
+                            className={`w-full text-left py-3 font-sans text-body-md border-b border-outline-variant/20 last:border-0 transition-colors ${
+                                link.isActive ? 'text-primary font-semibold' : 'text-on-surface-variant'
+                            }`}
+                        >
+                            {link.name}
+                        </button>
+                    ))}
+                    <button
+                        onClick={handleLogout}
+                        className="w-full text-left py-3 font-sans text-body-md text-on-surface-variant transition-colors"
+                    >
+                        Sign out
+                    </button>
+                </motion.div>
+            )}
+        </motion.header>
     );
 };
 

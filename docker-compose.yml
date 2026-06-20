@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:6.0-jammy
+    container_name: popcorn-iq-db
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - popcorn-network
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: popcorn-iq-server
+    ports:
+      - "5000:5000"
+    env_file:
+      - ./server/.env
+    environment:
+      - MONGO_URI=mongodb://mongodb:27017/moviedb
+      - NODE_ENV=development
+    volumes:
+      - ./server:/app
+      - /app/node_modules
+    depends_on:
+      - mongodb
+    networks:
+      - popcorn-network
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: popcorn-iq-client
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:5000
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+    depends_on:
+      - server
+    networks:
+      - popcorn-network
+
+volumes:
+  mongo-data:
+
+networks:
+  popcorn-network:
+    driver: bridge

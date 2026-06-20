@@ -5,9 +5,30 @@ const api = axios.create({
     timeout: 20000,
 });
 
+// 🧠 Neural Cache for sub-second browsing speeds
+const cache = new Map();
+const CACHE_TTL = 30000; // 30 seconds
+
 // Request interceptor to attach bearer token
 api.interceptors.request.use(
     (config) => {
+        // Only cache GET requests with no explicit no-cache header
+        if (config.method === 'get' && !config.headers['x-no-cache']) {
+            const cacheKey = config.url + JSON.stringify(config.params || {});
+            const cachedResponse = cache.get(cacheKey);
+
+            if (cachedResponse && (Date.now() - cachedResponse.timestamp < CACHE_TTL)) {
+                config.adapter = () => Promise.resolve({
+                    data: cachedResponse.data,
+                    status: 200,
+                    statusText: 'OK',
+                    headers: {},
+                    config,
+                    request: {}
+                });
+            }
+        }
+
         const token = localStorage.getItem('token');
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
@@ -19,7 +40,17 @@ api.interceptors.request.use(
 
 // Response interceptor for global error handling and retries
 api.interceptors.response.use(
-    (response) => response,
+    (response) => {
+        // Store in cache only for GET requests
+        if (response.config.method === 'get') {
+            const cacheKey = response.config.url + JSON.stringify(response.config.params || {});
+            cache.set(cacheKey, {
+                data: response.data,
+                timestamp: Date.now()
+            });
+        }
+        return response;
+    },
     async (error) => {
         const config = error.config;
 

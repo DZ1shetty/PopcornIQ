@@ -12,7 +12,10 @@ router.get('/', protect, async (req, res) => {
         if (!user) {
             return res.status(404).json({ error: 'User not found' });
         }
-        res.json({ watchlist: user.preferences?.watchlist || [] });
+        res.json({ 
+            watchlist: user.preferences?.watchlist || [],
+            watchlistData: user.preferences?.watchlistData || []
+        });
     } catch (error) {
         console.error('Watchlist fetch error:', error);
         res.status(500).json({ error: 'Failed to fetch watchlist' });

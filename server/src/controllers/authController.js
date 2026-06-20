@@ -25,15 +25,15 @@ const generateToken = (id) => {
 // @desc    Register new user
 // @route   POST /api/auth/register
 // @access  Public
-const registerUser = async (req, res) => {
+const registerUser = async (req, res, next) => {
     try {
         const { username, email, password } = registerSchema.parse(req.body);
 
-        // Check if user exists
-        const userExists = await User.findOne({ email });
+        // Check if user exists (email or username)
+        const userExists = await User.findOne({ $or: [{ email }, { username }] });
         if (userExists) {
             res.status(400);
-            throw new Error('User already exists');
+            throw new Error(userExists.email === email ? 'Email already registered' : 'Username already taken');
         }
 
         // Hash password
@@ -60,18 +60,16 @@ const registerUser = async (req, res) => {
         }
     } catch (error) {
         if (error instanceof z.ZodError) {
-            res.status(400).json({ message: error.errors });
-        } else {
-            res.status(400);
-            throw new Error(error.message);
+            return res.status(400).json({ message: 'Validation failed', errors: error.errors });
         }
+        next(error); // Properly pass to error middleware
     }
 };
 
 // @desc    Authenticate a user
 // @route   POST /api/auth/login
 // @access  Public
-const loginUser = async (req, res) => {
+const loginUser = async (req, res, next) => {
     try {
         const { email, password } = loginSchema.parse(req.body);
 
@@ -90,11 +88,9 @@ const loginUser = async (req, res) => {
         }
     } catch (error) {
         if (error instanceof z.ZodError) {
-            res.status(400).json({ message: error.errors });
-        } else {
-            res.status(400);
-            throw new Error(error.message);
+            return res.status(400).json({ message: 'Validation failed', errors: error.errors });
         }
+        next(error);
     }
 };
 
@@ -108,7 +104,7 @@ const getMe = async (req, res) => {
 // @desc    Google Login
 // @route   POST /api/auth/google
 // @access  Public
-const googleLogin = async (req, res) => {
+const googleLogin = async (req, res, next) => {
     try {
         const { email, username, googleId } = req.body; // In prod, verify token instead
 
@@ -153,8 +149,7 @@ const googleLogin = async (req, res) => {
             }
         }
     } catch (error) {
-        res.status(400);
-        throw new Error(error.message);
+        next(error);
     }
 };
 

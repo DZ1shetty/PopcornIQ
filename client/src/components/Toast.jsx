@@ -6,81 +6,50 @@ const ToastContext = createContext();
 
 export const useToast = () => {
     const context = useContext(ToastContext);
-    if (!context) {
-        throw new Error('useToast must be used within a ToastProvider');
-    }
+    if (!context) throw new Error('useToast must be used within a ToastProvider');
     return context;
 };
 
+const STYLES = {
+    success: { icon: Check,        bg: 'bg-surface border-l-2 border-l-emerald-500', iconClass: 'text-emerald-600', label: 'Done'    },
+    archive: { icon: Bookmark,     bg: 'bg-surface border-l-2 border-l-primary',     iconClass: 'text-primary',     label: 'Saved'   },
+    error:   { icon: AlertCircle,  bg: 'bg-surface border-l-2 border-l-error',        iconClass: 'text-error',       label: 'Error'   },
+    info:    { icon: Info,         bg: 'bg-surface border-l-2 border-l-secondary',    iconClass: 'text-secondary',   label: 'Info'    },
+};
+
 const Toast = ({ id, message, type, onDismiss }) => {
-    const icons = {
-        success: Check,
-        archive: Bookmark,
-        error: AlertCircle,
-        info: Info
-    };
-
-    const colors = {
-        success: 'border-green-500/30 bg-green-500/10',
-        archive: 'border-accent/30 bg-accent/10',
-        error: 'border-red-500/30 bg-red-500/10',
-        info: 'border-blue-500/30 bg-blue-500/10'
-    };
-
-    const iconColors = {
-        success: 'text-green-400',
-        archive: 'text-accent',
-        error: 'text-red-400',
-        info: 'text-blue-400'
-    };
-
-    const labels = {
-        success: 'Success',
-        archive: 'Added to Watchlist',
-        error: 'Error',
-        info: 'Info'
-    };
-
-    const Icon = icons[type] || icons.info;
+    const s = STYLES[type] || STYLES.info;
+    const Icon = s.icon;
 
     return (
         <motion.div
-            initial={{ opacity: 0, x: 100, scale: 0.9 }}
-            animate={{ opacity: 1, x: 0, scale: 1 }}
-            exit={{ opacity: 0, x: 100, scale: 0.9 }}
-            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-            className={`relative flex items-center gap-4 px-5 py-4 border backdrop-blur-xl shadow-2xl min-w-[320px] max-w-[420px] ${colors[type] || colors.info}`}
+            initial={{ opacity: 0, x: 48, y: 8 }}
+            animate={{ opacity: 1, x: 0, y: 0 }}
+            exit={{ opacity: 0, x: 48 }}
+            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            className={`relative flex items-start gap-3 px-5 py-4 min-w-[280px] max-w-[380px] ${s.bg}`}
+            style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)' }}
         >
-            {/* Glow Effect */}
-            <div className={`absolute inset-0 opacity-20 blur-xl ${type === 'archive' ? 'bg-accent' : type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500'}`} />
-
-            {/* Content */}
-            <div className="relative z-10 flex items-center gap-4 flex-1">
-                <div className={`w-10 h-10 flex items-center justify-center border ${colors[type]} rounded-lg`}>
-                    <Icon className={`w-5 h-5 ${iconColors[type]}`} />
-                </div>
-
-                <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-white truncate">{message}</p>
-                    <span className="text-[10px] text-white/40 uppercase tracking-widest">
-                        {labels[type]}
-                    </span>
-                </div>
-
-                <button
-                    onClick={() => onDismiss(id)}
-                    className="p-2 text-white/30 hover:text-white/60 transition-colors"
-                >
-                    <X className="w-4 h-4" />
-                </button>
+            <div className={`flex-shrink-0 mt-0.5 ${s.iconClass}`}>
+                <Icon size={16} strokeWidth={1.5} />
             </div>
+            <div className="flex-1 min-w-0">
+                <p className="font-sans text-sm font-medium text-on-surface leading-snug">{message}</p>
+                <p className="font-sans text-[11px] text-on-surface-variant/60 uppercase tracking-widest mt-0.5">{s.label}</p>
+            </div>
+            <button
+                onClick={() => onDismiss(id)}
+                className="flex-shrink-0 p-1 text-on-surface-variant/40 hover:text-on-surface transition-colors"
+            >
+                <X size={14} strokeWidth={1.5} />
+            </button>
 
-            {/* Progress Bar */}
+            {/* Progress bar */}
             <motion.div
                 initial={{ scaleX: 1 }}
                 animate={{ scaleX: 0 }}
                 transition={{ duration: 4, ease: 'linear' }}
-                className={`absolute bottom-0 left-0 right-0 h-[2px] origin-left ${type === 'archive' ? 'bg-accent' : type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500'}`}
+                className="absolute bottom-0 left-0 right-0 h-[2px] origin-left bg-current opacity-20"
             />
         </motion.div>
     );
@@ -92,12 +61,7 @@ export const ToastProvider = ({ children }) => {
     const addToast = useCallback((message, type = 'info') => {
         const id = Date.now() + Math.random();
         setToasts(prev => [...prev, { id, message, type }]);
-
-        // Auto dismiss after 4 seconds
-        setTimeout(() => {
-            setToasts(prev => prev.filter(t => t.id !== id));
-        }, 4000);
-
+        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
         return id;
     }, []);
 
@@ -105,29 +69,21 @@ export const ToastProvider = ({ children }) => {
         setToasts(prev => prev.filter(t => t.id !== id));
     }, []);
 
-    // Convenience methods
     const toast = {
-        success: (message) => addToast(message, 'success'),
-        archive: (message) => addToast(message, 'archive'),
-        error: (message) => addToast(message, 'error'),
-        info: (message) => addToast(message, 'info'),
+        success: (msg) => addToast(msg, 'success'),
+        archive: (msg) => addToast(msg, 'archive'),
+        error:   (msg) => addToast(msg, 'error'),
+        info:    (msg) => addToast(msg, 'info'),
     };
 
     return (
         <ToastContext.Provider value={toast}>
             {children}
-
-            {/* Toast Container - Bottom Right */}
-            <div className="fixed bottom-6 right-6 z-[9999] flex flex-col gap-3 pointer-events-none">
+            <div className="fixed bottom-6 right-6 z-[9999] flex flex-col gap-2 pointer-events-none">
                 <AnimatePresence mode="popLayout">
                     {toasts.map(t => (
                         <div key={t.id} className="pointer-events-auto">
-                            <Toast
-                                id={t.id}
-                                message={t.message}
-                                type={t.type}
-                                onDismiss={dismissToast}
-                            />
+                            <Toast id={t.id} message={t.message} type={t.type} onDismiss={dismissToast} />
                         </div>
                     ))}
                 </AnimatePresence>

@@ -23,23 +23,7 @@ export const WatchlistProvider = ({ children }) => {
                 setLoading(true);
                 const { data } = await api.get('/api/watchlist');
                 setWatchlist(data.watchlist || []);
-
-                // Fetch full data for watchlist movies
-                if (data.watchlist && data.watchlist.length > 0) {
-                    const moviePromises = data.watchlist.slice(0, 50).map(id =>
-                        api.get(`/api/tmdb/${id}`).then(res => ({
-                            movieId: res.data.id,
-                            title: res.data.title,
-                            posterPath: res.data.poster_path,
-                            backdropPath: res.data.backdrop_path,
-                            voteAverage: res.data.vote_average,
-                            releaseDate: res.data.release_date,
-                            overview: res.data.overview
-                        })).catch(() => null)
-                    );
-                    const movies = await Promise.all(moviePromises);
-                    setWatchlistData(movies.filter(Boolean));
-                }
+                setWatchlistData(data.watchlistData || []);
             } catch (error) {
                 console.error('Failed to fetch watchlist:', error);
             } finally {

@@ -1,217 +1,224 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, X, Star, TrendingUp, CornerDownLeft } from 'lucide-react';
+import { Search, X, CornerDownLeft, Clock } from 'lucide-react';
 import api from '../services/api';
 
 const SearchPalette = ({ isOpen, onClose }) => {
-    const [query, setQuery] = useState('');
-    const [results, setResults] = useState([]);
-    const [trending, setTrending] = useState([]);
-    const [loading, setLoading] = useState(false);
+    const [query,         setQuery]         = useState('');
+    const [results,       setResults]       = useState([]);
+    const [recentSearches, setRecentSearches] = useState([]);
+    const [loading,       setLoading]       = useState(false);
+    const [selectedIndex, setSelectedIndex] = useState(0);
     const inputRef = useRef(null);
     const navigate = useNavigate();
 
     useEffect(() => {
+        const saved = localStorage.getItem('recentSearches');
+        if (saved) setRecentSearches(JSON.parse(saved));
+    }, []);
+
+    useEffect(() => {
         if (isOpen) {
-            inputRef.current?.focus();
-            fetchTrending();
-            document.body.style.overflow = 'hidden';
+            setTimeout(() => inputRef.current?.focus(), 80);
+            setSelectedIndex(0);
         } else {
             setQuery('');
             setResults([]);
-            document.body.style.overflow = 'unset';
         }
-
-        return () => {
-            document.body.style.overflow = 'unset';
-        };
     }, [isOpen]);
 
-    const fetchTrending = async () => {
-        try {
-            const res = await api.get('/api/tmdb/trending/today');
-            setTrending(res.data.results?.slice(0, 5) || []);
-        } catch (err) {
-            console.error("Trending scan failed:", err);
-        }
-    };
-
     useEffect(() => {
-        const timer = setTimeout(() => {
-            if (query.trim()) {
-                performSearch();
-            } else {
-                setResults([]);
-            }
+        const t = setTimeout(() => {
+            if (query.trim()) performSearch();
+            else setResults([]);
         }, 300);
-
-        return () => clearTimeout(timer);
+        return () => clearTimeout(t);
     }, [query]);
 
     const performSearch = async () => {
         setLoading(true);
         try {
-            const res = await api.get(`/api/tmdb/search?q=${query}`);
-            setResults(res.data.results?.slice(0, 20) || []);
-        } catch (err) {
-            console.error("Search failed:", err);
+            const [tmdbRes, localRes] = await Promise.allSettled([
+                api.get(`/api/tmdb/search?q=${query}`),
+                api.get(`/api/recommendations/search?q=${query}`)
+            ]);
+            const tmdb  = tmdbRes.status  === 'fulfilled' ? tmdbRes.value.data.results?.slice(0, 6) || [] : [];
+            const local = localRes.status === 'fulfilled' ? localRes.value.data?.slice(0, 3) || [] : [];
+            const combined = [...tmdb];
+            local.forEach(m => {
+                if (!combined.some(x => x.id === m.tmdbId || x.title === m.title)) {
+                    combined.push({ id: m.tmdbId || m.movieId, isLocal: true, title: m.title, poster_path: m.posterPath, release_date: m.releaseDate?.toString() });
+                }
+            });
+            setResults(combined.slice(0, 8));
+            setSelectedIndex(0);
+        } catch {
+            /* silent */
         } finally {
             setLoading(false);
         }
     };
 
-    const handleSelect = (movieId) => {
+    const handleSelect = (movie) => {
+        const entry = { id: movie.id, title: movie.title, year: movie.release_date?.split('-')[0] };
+        const updated = [entry, ...recentSearches.filter(s => s.id !== movie.id)].slice(0, 5);
+        setRecentSearches(updated);
+        localStorage.setItem('recentSearches', JSON.stringify(updated));
         onClose();
-        navigate(`/movie/${movieId}`);
+        navigate(`/movie/${movie.id}`);
     };
+
+    const handleKeyDown = (e) => {
+        const items = results.length > 0 ? results : (query === '' ? recentSearches : []);
+        const total = items.length;
+        if (e.key === 'ArrowDown') { e.preventDefault(); setSelectedIndex(p => (p + 1) % total); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); setSelectedIndex(p => (p - 1 + total) % total); }
+        else if (e.key === 'Enter' && total > 0) { handleSelect(items[selectedIndex]); }
+        else if (e.key === 'Escape') onClose();
+    };
+
+    const clearRecent = () => { setRecentSearches([]); localStorage.removeItem('recentSearches'); };
+
+    const displayList = results.length > 0 ? results : (query === '' ? recentSearches : []);
+    const isRecent    = results.length === 0 && query === '';
 
     return (
         <AnimatePresence>
             {isOpen && (
-                <div className="fixed inset-0 z-[1500] flex items-center justify-center p-4">
+                <div className="fixed inset-0 z-[3000] flex items-start justify-center px-4 pt-24 sm:pt-32">
+                    {/* Backdrop */}
                     <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
+                        transition={{ duration: 0.2 }}
                         onClick={onClose}
-                        className="fixed inset-0 bg-black/90 backdrop-blur-md"
+                        className="fixed inset-0 bg-black/50 backdrop-blur-md"
                     />
 
+                    {/* Dialog */}
                     <motion.div
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        className="relative w-full max-w-[95vw] h-[90vh] flex flex-col bg-[#0a0a0a] border border-white/10 shadow-[0_0_100px_rgba(0,0,0,0.9)] overflow-hidden rounded-xl"
+                        initial={{ opacity: 0, scale: 0.97, y: -8 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.97, y: -8 }}
+                        transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+                        className="relative w-full max-w-[640px] bg-surface overflow-hidden flex flex-col"
+                        style={{ boxShadow: '0 24px 80px rgba(0,0,0,0.25)' }}
                     >
-                        {/* Search Header */}
-                        <div className="flex-none flex items-center gap-5 px-8 py-6 border-b border-white/5 bg-white/[0.02]">
-                            <div className="relative">
-                                <Search className={loading ? "animate-spin text-accent" : "text-white/40"} size={32} />
-                                {loading && <div className="absolute inset-0 blur-sm bg-accent/20 animate-pulse rounded-full" />}
-                            </div>
+                        {/* Input Row */}
+                        <div className="flex items-center gap-4 px-6 py-4 border-b border-outline-variant/30">
+                            <Search
+                                size={18}
+                                strokeWidth={1.5}
+                                className={`flex-shrink-0 transition-colors ${loading ? 'text-primary animate-pulse' : 'text-on-surface-variant/50'}`}
+                            />
                             <input
                                 ref={inputRef}
                                 type="text"
                                 value={query}
-                                onChange={(e) => setQuery(e.target.value)}
-                                placeholder="SEARCH MOVIES..."
-                                className="flex-1 bg-transparent text-3xl md:text-4xl font-black uppercase tracking-tighter placeholder-white/10 focus:outline-none text-white selection:bg-accent/30"
+                                onChange={e => setQuery(e.target.value)}
+                                onKeyDown={handleKeyDown}
+                                placeholder="Search films, genres, moods…"
+                                className="flex-1 bg-transparent font-sans text-base text-on-surface placeholder:text-on-surface-variant/40 outline-none"
                             />
-                            <div className="flex items-center gap-4">
-                                <button
-                                    onClick={onClose}
-                                    className="group flex items-center gap-3 px-4 py-2 hover:bg-white/5 rounded-full transition-all"
-                                >
-                                    <span className="hidden md:block text-[10px] font-black uppercase tracking-widest text-white/30 group-hover:text-white transition-colors">Close</span>
-                                    <div className="p-2 bg-white/5 group-hover:bg-white/10 rounded-full text-white/40 group-hover:text-white transition-all transform group-hover:rotate-90">
-                                        <X size={20} />
-                                    </div>
+                            <div className="flex items-center gap-2">
+                                <kbd className="font-sans text-[10px] text-on-surface-variant/40 border border-outline-variant/30 px-1.5 py-0.5 rounded-sm">ESC</kbd>
+                                <button onClick={onClose} className="p-1 text-on-surface-variant/50 hover:text-on-surface transition-colors">
+                                    <X size={16} strokeWidth={1.5} />
                                 </button>
                             </div>
                         </div>
 
-                        {/* Content Area - Flex Grow to fill height */}
-                        <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-white/10 hover:[&::-webkit-scrollbar-thumb]:bg-white/20">
-                            {query ? (
-                                <div className="min-h-full flex flex-col">
-                                    <div className="flex-none px-8 py-4 border-b border-white/5 bg-accent/5 flex items-center justify-between sticky top-0 z-10 backdrop-blur-xl">
-                                        <span className="text-[10px] font-black uppercase tracking-[0.5em] text-accent">Results</span>
-                                        <span className="text-[10px] font-black uppercase tracking-widest text-white/20">{results.length} Found</span>
-                                    </div>
+                        {/* Results */}
+                        <div className="max-h-[60vh] overflow-y-auto scrollbar-hide">
 
-                                    {results.length > 0 ? (
-                                        <div className="flex-1 p-8">
-                                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-10 gap-4">
-                                                {results.map((movie, index) => (
-                                                    <motion.button
-                                                        key={movie.id || index}
-                                                        initial={{ opacity: 0, scale: 0.5 }}
-                                                        animate={{ opacity: 1, scale: 1 }}
-                                                        transition={{
-                                                            delay: index * 0.03,
-                                                            type: "spring",
-                                                            stiffness: 300,
-                                                            damping: 20
-                                                        }}
-                                                        onClick={() => handleSelect(movie.id)}
-                                                        className="group relative aspect-[2/3] w-full rounded-md overflow-hidden bg-white/5 ring-1 ring-white/10 hover:ring-accent/50 hover:shadow-[0_0_30px_rgba(var(--accent-rgb),0.2)] transition-all duration-500"
-                                                    >
-                                                        <img
-                                                            src={movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : 'https://via.placeholder.com/342x513?text=N/A'}
-                                                            alt={movie.title}
-                                                            className="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:opacity-100 group-hover:scale-110 transition-all duration-700 grayscale group-hover:grayscale-0"
-                                                            onError={(e) => { e.target.onerror = null; e.target.src = 'https://via.placeholder.com/342x513?text=No+Image'; }}
-                                                        />
-
-                                                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-80 group-hover:opacity-100 transition-opacity" />
-
-                                                        <div className="absolute inset-0 p-4 flex flex-col justify-end items-start opacity-100 translate-y-2 group-hover:translate-y-0 transition-transform duration-500">
-                                                            <div className="w-full flex justify-between items-end mb-1">
-                                                                <div className="px-2 py-0.5 bg-accent text-black text-[10px] font-black rounded-sm transform scale-0 group-hover:scale-100 transition-transform duration-300 origin-bottom-left">
-                                                                    {movie.vote_average?.toFixed(1) || '0.0'}
-                                                                </div>
-                                                                <span className="text-[9px] font-bold text-white/40 uppercase tracking-widest">{movie.release_date?.split('-')[0]}</span>
-                                                            </div>
-                                                            <h4 className="w-full text-[11px] font-black uppercase leading-tight text-white/80 group-hover:text-white group-hover:tracking-wide transition-all text-left line-clamp-2">
-                                                                {movie.title}
-                                                            </h4>
-                                                        </div>
-                                                    </motion.button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    ) : !loading && (
-                                        <div className="flex-1 flex flex-col items-center justify-center p-20 opacity-20">
-                                            <Search size={64} strokeWidth={0.5} className="mb-8" />
-                                            <p className="text-sm font-black uppercase tracking-[1em]">No Matches Found</p>
-                                        </div>
+                            {/* Section label */}
+                            {displayList.length > 0 && (
+                                <div className="flex items-center justify-between px-6 py-3 border-b border-outline-variant/20">
+                                    <span className="font-sans text-[10px] text-on-surface-variant/60 uppercase tracking-[0.12em]">
+                                        {isRecent ? 'Recent' : 'Results'}
+                                    </span>
+                                    {isRecent && (
+                                        <button onClick={clearRecent} className="font-sans text-[10px] text-on-surface-variant/50 hover:text-primary transition-colors">
+                                            Clear
+                                        </button>
                                     )}
                                 </div>
-                            ) : (
-                                <div className="h-full flex flex-col">
-                                    <div className="flex-1 p-8">
-                                        <div className="w-full">
-                                            <div className="flex items-center gap-4 text-accent mb-8">
-                                                <TrendingUp size={20} />
-                                                <span className="text-xs font-black uppercase tracking-[0.8em]">Trending Now</span>
+                            )}
+
+                            {/* Item list */}
+                            {displayList.map((movie, i) => (
+                                <button
+                                    key={movie.id ?? `recent-${i}`}
+                                    onClick={() => handleSelect(movie)}
+                                    onMouseEnter={() => setSelectedIndex(i)}
+                                    className={`w-full flex items-center gap-4 px-6 py-3.5 transition-colors text-left cursor-pointer border-b border-outline-variant/10 last:border-0 ${
+                                        selectedIndex === i ? 'bg-surface-container' : 'hover:bg-surface-container-low'
+                                    }`}
+                                >
+                                    {/* Poster thumbnail */}
+                                    <div className="w-9 h-12 bg-surface-container-high rounded-sm overflow-hidden flex-shrink-0">
+                                        {movie.poster_path ? (
+                                            <img
+                                                src={`https://image.tmdb.org/t/p/w92${movie.poster_path}`}
+                                                className="w-full h-full object-cover"
+                                                alt=""
+                                            />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center">
+                                                {isRecent
+                                                    ? <Clock size={14} className="text-on-surface-variant/40" />
+                                                    : <Search size={12} className="text-on-surface-variant/30" />
+                                                }
                                             </div>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                                                {trending.map((movie, i) => (
-                                                    <button
-                                                        key={`trending-${movie.id}`}
-                                                        onClick={() => handleSelect(movie.id)}
-                                                        className="group flex items-center gap-4 p-4 bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] hover:border-white/10 transition-all rounded-lg overflow-hidden relative"
-                                                    >
-                                                        <div className="w-12 h-16 bg-white/5 rounded-sm overflow-hidden flex-none">
-                                                            <img
-                                                                src={movie.poster_path ? `https://image.tmdb.org/t/p/w92${movie.poster_path}` : ''}
-                                                                className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity"
-                                                            />
-                                                        </div>
-                                                        <div className="flex-1 text-left">
-                                                            <h4 className="text-xs font-black uppercase tracking-wider text-white/40 group-hover:text-white transition-colors line-clamp-1">
-                                                                {movie.title}
-                                                            </h4>
-                                                            <span className="text-[10px] font-bold text-white/20 mt-1 block">
-                                                                #{i + 1} Trending
-                                                            </span>
-                                                        </div>
-                                                        <CornerDownLeft size={14} className="text-white/10 group-hover:text-accent -translate-x-4 opacity-0 group-hover:translate-x-0 group-hover:opacity-100 transition-all" />
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
+                                        )}
                                     </div>
 
-                                    <div className="flex-none px-8 py-8 border-t border-white/5 flex justify-between items-center text-[10px] font-black uppercase tracking-[0.4em] text-white/10">
-                                        <div className="flex items-center gap-8">
-                                            <span className="flex items-center gap-3"><div className="w-1.5 h-1.5 bg-accent rounded-full animate-pulse" /> Live Search</span>
-                                        </div>
-                                        <span>PopcornIQ v2.0</span>
+                                    {/* Info */}
+                                    <div className="flex-1 min-w-0">
+                                        <p className="font-sans text-sm font-medium text-on-surface truncate">
+                                            {movie.title}
+                                        </p>
+                                        <p className="font-sans text-xs text-on-surface-variant/60 mt-0.5">
+                                            {movie.release_date?.split('-')[0] || movie.year || '—'}
+                                            {movie.isLocal && <span className="ml-2 text-[9px] uppercase tracking-wider text-primary/60">Local</span>}
+                                        </p>
                                     </div>
+
+                                    {/* Enter hint */}
+                                    {selectedIndex === i && (
+                                        <CornerDownLeft size={13} className="text-on-surface-variant/40 flex-shrink-0" />
+                                    )}
+                                </button>
+                            ))}
+
+                            {/* Empty state */}
+                            {query && !loading && results.length === 0 && (
+                                <div className="py-14 flex flex-col items-center gap-3">
+                                    <Search size={24} strokeWidth={1} className="text-on-surface-variant/20" />
+                                    <p className="font-sans text-sm text-on-surface-variant/50">No results for "{query}"</p>
                                 </div>
                             )}
+
+                            {/* Initial empty */}
+                            {!query && recentSearches.length === 0 && (
+                                <div className="py-12 text-center">
+                                    <p className="font-sans text-sm text-on-surface-variant/40">Start typing to search…</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="px-6 py-3 border-t border-outline-variant/20 flex items-center gap-6">
+                            <div className="flex items-center gap-2 text-on-surface-variant/40">
+                                <kbd className="font-sans text-[10px] border border-outline-variant/30 px-1.5 py-0.5 rounded-sm">↑↓</kbd>
+                                <span className="font-sans text-[10px]">Navigate</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-on-surface-variant/40">
+                                <kbd className="font-sans text-[10px] border border-outline-variant/30 px-1.5 py-0.5 rounded-sm">↵</kbd>
+                                <span className="font-sans text-[10px]">Select</span>
+                            </div>
                         </div>
                     </motion.div>
                 </div>
