@@ -1,7 +1,8 @@
 const axios = require('axios');
 const https = require('https');
 
-const API_KEY = 'TMDB_API_KEY_PLACEHOLDER';
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+const API_KEY = process.env.TMDB_API_KEY;
 const agent = new https.Agent({ family: 4 });
 
 async function run() {

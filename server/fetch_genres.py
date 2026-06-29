@@ -2,7 +2,9 @@ import urllib.request
 import json
 import time
 
-API_KEY = 'TMDB_API_KEY_PLACEHOLDER'
+import os
+
+API_KEY = os.environ.get('TMDB_API_KEY')
 base = 'https://api.themoviedb.org/3'
 
 def get_json(url):
